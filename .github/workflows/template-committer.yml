@@ -1,0 +1,31 @@
+name: Commit Template
+
+on:
+  workflow_call:
+    inputs:
+      target_user:
+        required: true
+        type: string
+
+jobs:
+  do-commit:
+    runs-on: ubuntu-latest
+    env:
+      SRC_PAT: ${{ secrets.SRC_PAT }}
+      TARGET_USER: ${{ inputs.target_user }}
+      TGT_PAT: ${{ secrets[format('TGT_PAT_{0}', inputs.target_user | upper)] }}
+
+    steps:
+      - name: Checkout controller repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Run sync
+        run: python auto_sync.py --target-user $TARGET_USER

@@ -1,0 +1,18 @@
+repos:
+  - source: your-source-user/reponame
+    target: userb/target-repo
+    branch: main
+    base_path: days
+    messages:
+      - "Learning Day"
+      - "Knowledge Drop"
+      - "Progress Update"
+
+  - source: your-source-user/reponame
+    target: userc/another-repo
+    branch: main
+    base_path: days
+    messages:
+      - "New lesson arrived"
+      - "Day complete"
+      - "Added new topic"

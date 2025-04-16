@@ -1,0 +1,13 @@
+name: Auto Commit for UserB
+
+on:
+  schedule:
+    - cron: '0 3 * * *'  # Every day at 3:00 AM UTC
+  workflow_dispatch:
+
+jobs:
+  sync:
+    uses: ./.github/workflows/template-committer.yml
+    with:
+      target_user: userb
+    secrets: inherit
