@@ -1,23 +1,23 @@
 userA:
   mappings:
     - source:
-        username: source-org1
-        repo: source-repo1
+        username: harishtallam
+        repo: 100DaysOfJava
       target:
-        username: userA
-        repo: target-repo1
+        username: harishfeb25
+        repo: 100DaysOfJava
         private: true
       custom_messages:
         day001: "🚀 Kicking off Repo 1!"
         day005: "🧩 Day 5 milestone!"
-
-    - source:
-        username: source-org2
-        repo: source-repo2
-      target:
-        username: userA
-        repo: target-repo2
-        private: false
-      custom_messages:
-        day001: "📦 Beginning sync for Repo 2"
-        day010: "🎯 10 Days Synced!"
+    
+    #- source:
+    #    username: source-org2
+    #    repo: source-repo2
+    #  target:
+    #    username: userA
+    #    repo: target-repo2
+    #    private: false
+    #  custom_messages:
+    #    day001: "📦 Beginning sync for Repo 2"
+    #    day010: "🎯 10 Days Synced!"
