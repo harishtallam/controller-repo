@@ -1,31 +1,25 @@
-name: Commit Template
+name: Template Committer
 
 on:
-  workflow_call:
-    inputs:
-      target_user:
-        required: true
-        type: string
+  workflow_dispatch:
 
 jobs:
-  do-commit:
+  commit:
     runs-on: ubuntu-latest
-    env:
-      SRC_PAT: ${{ secrets.SRC_PAT }}
-      TARGET_USER: ${{ inputs.target_user }}
-      TGT_PAT: ${{ secrets[format('TGT_PAT_{0}', inputs.target_user | upper)] }}
-
     steps:
-      - name: Checkout controller repo
-        uses: actions/checkout@v4
+      - name: Checkout controller
+        uses: actions/checkout@v3
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: 3.11
 
-      - name: Install dependencies
+      - name: Install deps
         run: pip install pyyaml
 
-      - name: Run sync
-        run: python auto_sync.py --target-user $TARGET_USER
+      - name: Run sync script
+        run: python auto_sync.py
+        env:
+          TOKEN_USERA: ${{ secrets.TOKEN_USERA }}
+          TOKEN_USERB: ${{ secrets.TOKEN_USERB }}

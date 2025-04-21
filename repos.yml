@@ -1,6 +1,6 @@
 repos:
-  - source: your-source-user/reponame
-    target: userb/target-repo
+  - source: harishtallam/100DaysOfJava
+    target: harishfeb25/100DaysOfJava
     branch: main
     base_path: days
     messages:

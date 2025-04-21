@@ -1,97 +1,106 @@
 import os
-import subprocess
 import shutil
+from github import Github
 import yaml
 import json
-import random
-import argparse
-from datetime import datetime
+from git import Repo
 
-def run(cmd, check=True):
-    print("RUNNING:", " ".join(cmd))
-    subprocess.run(cmd, check=check)
+# Helper function to get the next folder
+def get_next_day_folder(current):
+    if not current:
+        return 'day001'
+    n = int(current.replace('day', ''))
+    if n >= 100:
+        return None
+    return f"day{n+1:03}"
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--target-user", help="Target GitHub username (lowercase)")
-args = parser.parse_args()
-target_user = args.target_user.lower() if args.target_user else None
+# Check if folder exists in source repo
+def folder_exists_in_source(source_path, folder):
+    return os.path.exists(os.path.join(source_path, 'days', folder))
 
-with open("repos.yaml") as f:
-    config = yaml.safe_load(f)
+# Clone and commit to the target repo
+def sync_repos():
+    # Load configuration from the YAML file
+    with open("repo_config.yaml", 'r') as file:
+        config = yaml.safe_load(file)
+    
+    # Initialize progress tracking
+    if not os.path.exists("progress.json"):
+        with open("progress.json", 'w') as progress_file:
+            json.dump({}, progress_file)
+    
+    with open("progress.json", 'r') as progress_file:
+        progress = json.load(progress_file)
 
-state_file = "progress.json"
-if os.path.exists(state_file):
-    with open(state_file, "r") as f:
-        state = json.load(f)
-else:
-    state = {}
+    for user, mappings in config.items():
+        for mapping in mappings['mappings']:
+            source_repo = mapping['source']['repo']
+            target_repo = mapping['target']['repo']
+            source_username = mapping['source']['username']
+            target_username = mapping['target']['username']
+            target_private = mapping['target'].get('private', False)
+            
+            # Get the next folder to commit
+            key = f"{user}/{source_repo}->{target_repo}"
+            current_folder = progress.get(key, None)
+            next_folder = get_next_day_folder(current_folder)
+            
+            if next_folder:
+                print(f"Syncing {next_folder} from {source_repo} to {target_repo}")
+                
+                # Clone source repo (public or private with token)
+                g = Github(os.getenv(f"TOKEN_{user.upper()}"))
+                source_repo_instance = g.get_repo(f"{source_username}/{source_repo}")
+                
+                # Local clone
+                source_local_path = f"/tmp/{source_repo}"
+                if os.path.exists(source_local_path):
+                    shutil.rmtree(source_local_path)
+                
+                os.makedirs(source_local_path)
+                Repo.clone_from(source_repo_instance.clone_url, source_local_path, branch='main')
+                
+                # Check if the folder exists in source repo
+                if not folder_exists_in_source(source_local_path, next_folder):
+                    print(f"Folder {next_folder} does not exist in the source repo")
+                    continue
 
-for repo in config["repos"]:
-    src = repo["source"]
-    tgt = repo["target"]
-    branch = repo.get("branch", "main")
-    base_path = repo.get("base_path", "days")
-    messages = repo.get("messages", ["Daily Commit"])
+                # Clone target repo
+                target_local_path = f"/tmp/{target_repo}"
+                target_repo_instance = g.get_repo(f"{target_username}/{target_repo}")
+                
+                # Local clone
+                if os.path.exists(target_local_path):
+                    shutil.rmtree(target_local_path)
+                
+                os.makedirs(target_local_path)
+                Repo.clone_from(target_repo_instance.clone_url, target_local_path, branch='main')
 
-    if target_user and target_user != tgt.split("/")[0].lower():
-        continue
+                # Copy the folder to target repo
+                source_folder_path = os.path.join(source_local_path, 'days', next_folder)
+                target_folder_path = os.path.join(target_local_path, next_folder)
 
-    key = f"{src}->{tgt}"
-    last_index = state.get(key, 0)
+                shutil.copytree(source_folder_path, target_folder_path)
+                
+                # Commit and push the change
+                repo = Repo(target_local_path)
+                repo.git.add(A=True)
+                repo.index.commit(f"Add {next_folder} from source repo {source_repo}")
+                origin = repo.remote(name='origin')
+                origin.push()
 
-    if random.random() > 0.7:
-        print(f"🎲 Skipping sync for {key} today.")
-        continue
+                # Update progress file
+                progress[key] = next_folder
+                with open("progress.json", 'w') as progress_file:
+                    json.dump(progress, progress_file)
 
-    num_to_commit = random.randint(1, 3)
-    print(f"➡️ Will commit {num_to_commit} folder(s) for {key}")
+                # Check if all folders are committed (optional)
+                if not os.path.exists(os.path.join(source_local_path, 'days', f"day{int(next_folder[3:])+1:03}")):
+                    print(f"All folders from {source_repo} have been synced to {target_repo}. Disabling workflow.")
+                    with open(".done", "w") as done_file:
+                        done_file.write(f"All folders from {source_repo} synced.")
 
-    src_repo = src.split("/")[-1]
-    tgt_repo = tgt.split("/")[-1]
-    src_pat = os.environ["SRC_PAT"]
-    tgt_pat_var = f"TGT_PAT_{tgt.split('/')[0].upper()}"
-    tgt_pat = os.environ.get(tgt_pat_var)
+                break  # Once a folder is committed, stop for now
 
-    if not tgt_pat:
-        print(f"❌ Missing PAT for target user {tgt_pat_var}")
-        continue
-
-    src_url = f"https://x-access-token:{src_pat}@github.com/{src}.git"
-    tgt_url = f"https://x-access-token:{tgt_pat}@github.com/{tgt}.git"
-
-    run(["git", "clone", src_url, src_repo])
-    run(["git", "clone", "-b", branch, tgt_url, tgt_repo])
-
-    for i in range(1, num_to_commit + 1):
-        folder_index = last_index + i
-        folder_to_copy = f"day{folder_index:03d}"
-        src_folder = os.path.join(src_repo, base_path, folder_to_copy)
-        dst_folder = os.path.join(tgt_repo, folder_to_copy)
-
-        if not os.path.exists(src_folder):
-            print(f"⚠️ Folder {folder_to_copy} not found in source repo.")
-            continue
-
-        shutil.copytree(src_folder, dst_folder, dirs_exist_ok=True)
-
-        os.chdir(tgt_repo)
-        run(["git", "add", folder_to_copy])
-        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-        dynamic_msg = random.choice(messages)
-        #commit_msg = f"{dynamic_msg} — {folder_to_copy} at {timestamp}"
-        commit_msg = f"{dynamic_msg} — {folder_to_copy}"
-        result = subprocess.run(["git", "diff", "--cached", "--quiet"])
-        if result.returncode != 0:
-            run(["git", "commit", "-m", commit_msg])
-            run(["git", "push", "origin", branch])
-        else:
-            print(f"✅ No changes to commit for {folder_to_copy}.")
-        os.chdir("..")
-
-    shutil.rmtree(src_repo)
-    shutil.rmtree(tgt_repo)
-
-    state[key] = last_index + num_to_commit
-
-with open(state_file, "w") as f:
-    json.dump(state, f, indent=2)
+if __name__ == "__main__":
+    sync_repos()
